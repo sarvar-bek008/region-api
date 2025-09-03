@@ -29,7 +29,7 @@ def get_player_info(Id):
     response = requests.post(url, headers=headers, json=payload)
     return response
 
-@app.route('/region', methods=['GET'])
+@app.get('/region', methods=['GET'])
 def region():
     uid = request.args.get('uid')
     if not uid:
