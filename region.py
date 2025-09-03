@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 import requests
 
 app = FastAPI()
 
-def get_player_info(Id):    
+def get_player_info(Id, server_id):
     url = "https://shop2game.com/api/auth/player_id_login"
     headers = {
         "Accept": "application/json",
@@ -14,8 +14,8 @@ def get_player_info(Id):
     }
     payload = {
         "app_id": 100067,
-        "login_id": f"{Id}",
-        "app_server_id": 0,
+        "login_id": str(Id),
+        "app_server_id": server_id,
     }
     response = requests.post(url, headers=headers, json=payload)
     return response
@@ -24,21 +24,21 @@ def get_player_info(Id):
 async def region(uid: str = None):
     if not uid:
         return {"message": "Please provide a UID"}
+
+    # Sinab ko‘ramiz 1 dan 10 gacha serverlarni
+    for server_id in range(1, 11):
+        response = get_player_info(uid, server_id)
+        try:
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("nickname"):
+                    return {
+                        "uid": uid,
+                        "nickname": data.get("nickname"),
+                        "region": data.get("region", f"server-{server_id}"),
+                        "server_id": server_id
+                    }
+        except Exception:
+            continue
     
-    response = get_player_info(uid)
-    
-    try:
-        if response.status_code == 200:
-            original_response = response.json()
-            if not original_response.get('nickname') and not original_response.get('region'):
-                return {"message": "UID not found, please check the UID"}
-            
-            return {
-                "uid": uid,
-                "nickname": original_response.get('nickname', ''),
-                "region": original_response.get('region', '')
-            }
-        else:
-            return {"message": "UID not found, please check the UID"}
-    except Exception:
-        return {"message": "UID not found, please check the UID"}
+    return {"message": "UID not found in any server"}
