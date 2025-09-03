@@ -4,7 +4,7 @@ import requests
 app = Flask(__name__)
 
 def get_player_info(Id):    
-    url = "https://shop2game.com/api/auth/player_id_login"
+    url = "https://shop.garena.sg/api/auth/player_id_login"
     headers = {
         "Accept": "application/json",
         "Accept-Encoding": "gzip, deflate, br",
