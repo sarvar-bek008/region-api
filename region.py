@@ -8,11 +8,12 @@ def region():
     uid = request.args.get('uid')
     if not uid:
         return jsonify({"message": "Please provide a UID"}), 400
-    
+
     url = f"https://www.public.freefireinfo.site/api/info/sg/{uid}?key=astute_ff"
-    response = requests.get(url)
-    
-    if response.status_code == 200:
+
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
         data = response.json()
         if "nickname" in data:
             return jsonify({
@@ -22,8 +23,10 @@ def region():
             })
         else:
             return jsonify({"message": "UID not found"}), 404
-    else:
-        return jsonify({"message": "UID not found"}), 404
+    except requests.exceptions.RequestException as e:
+        return jsonify({"message": "API request failed", "error": str(e)}), 502
+    except ValueError:
+        return jsonify({"message": "Invalid response from API"}), 502
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run()
