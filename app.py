@@ -1,73 +1,77 @@
-from flask import Flask, request, jsonify
+import asyncio
 import requests
-from rich.console import Console
-from rich.progress import Progress
+from playwright.async_api import async_playwright
 
-app = Flask(__name__)
-console = Console()
 
-def get_player_region(uid):
-    with Progress() as progress:
-        task = progress.add_task("[cyan]Fetching player data...", total=100)
+async def get_tokens(uid):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)  # headless=False qilsangiz browser oynasi ochiladi
+        context = await browser.new_context()
 
-        cookies = {
-            'region': 'MA',
-            'language': 'ar',
-            'session_key': 'efwfzwesi9ui8drux4pmqix4cosane0y',
-        }
+        page = await context.new_page()
+        await page.goto("https://shop2game.com/app/100067/idlogin")
 
-        headers = {
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Origin': 'https://shop2game.com',
-            'Referer': 'https://shop2game.com/app/100067/idlogin',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; Redmi Note 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Mobile Safari/537.36',
-            'accept': 'application/json',
-            'content-type': 'application/json',
-            'x-datadome-clientid': '6h5F5cx_GpbuNtAkftMpDjsbLcL3op_5W5Z-npxeT_qcEe_7pvil2EuJ6l~JlYDxEALeyvKTz3~LyC1opQgdP~7~UDJ0jYcP5p20IQlT3aBEIKDYLH~cqdfXnnR6FAL0',
-        }
+        # Cookie va localStorage dan kerakli tokenlarni olish
+        cookies = await context.cookies()
+        local_storage = await page.evaluate("() => window.localStorage")
 
-        json_data = {
-            'app_id': 100067,
-            'login_id': uid,
-            'app_server_id': 0,
-        }
+        session_key = None
+        for c in cookies:
+            if c.get("name") == "session_key":
+                session_key = c.get("value")
 
-        try:
-            progress.update(task, advance=50)
-            res = requests.post(
-                'https://shop2game.com/api/auth/player_id_login',
-                cookies=cookies, headers=headers, json=json_data
-            )
+        datadome_token = None
+        for c in cookies:
+            if c.get("name") == "datadome":
+                datadome_token = c.get("value")
 
-            if res.status_code != 200 or not res.json().get('nickname'):
-                return {"error": "ID NOT FOUND"}
+        await browser.close()
 
-            player_data = res.json()
-            player_name = player_data.get('nickname', 'N/A')
-            region = player_data.get('region', 'N/A')
+        return session_key, datadome_token
 
-            progress.update(task, advance=50)
 
-            return {
-                "player_id": uid,
-                "player_name": player_name,
-                "region": region
-            }
+def get_player_info(uid, session_key, datadome_token):
+    url = "https://shop2game.com/api/auth/player_id_login"
 
-        except requests.exceptions.RequestException as e:
-            return {"error": str(e)}
+    cookies = {
+        "region": "MA",
+        "language": "ar",
+        "session_key": session_key,
+        "datadome": datadome_token,
+    }
 
-@app.route('/region', methods=['GET'])
-def region_info():
-    uid = request.args.get('uid')
-    if not uid:
-        return jsonify({"error": "UID parameter is required"}), 400
+    headers = {
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://shop2game.com",
+        "Referer": "https://shop2game.com/app/100067/idlogin",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) "
+                      "Chrome/108.0.0.0 Safari/537.36",
+        "accept": "application/json",
+        "content-type": "application/json",
+    }
 
-    result = get_player_region(uid)
-    if "error" in result:
-        return jsonify(result), 404
+    json_data = {
+        "app_id": 100067,
+        "login_id": uid,
+        "app_server_id": 0,
+    }
 
-    return jsonify(result)
+    res = requests.post(url, cookies=cookies, headers=headers, json=json_data)
+    return res.json()
 
-if __name__ == '__main__':
-    app.run(debug=True)
+
+async def main(uid):
+    session_key, datadome_token = await get_tokens(uid)
+
+    if not session_key or not datadome_token:
+        print("❌ Tokenlarni olishda muammo chiqdi")
+        return
+
+    data = get_player_info(uid, session_key, datadome_token)
+    print(data)
+
+
+if __name__ == "__main__":
+    # Misol uchun UID
+    asyncio.run(main("1234567890"))
