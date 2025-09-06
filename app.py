@@ -1,43 +1,39 @@
+from flask import Flask, request, jsonify
 import asyncio
-import requests
 from playwright.async_api import async_playwright
+import requests
 
+app = Flask(__name__)
 
-async def get_tokens(uid):
+async def get_tokens():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)  # headless=False qilsangiz browser oynasi ochiladi
+        browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
-
         page = await context.new_page()
+
         await page.goto("https://shop2game.com/app/100067/idlogin")
 
-        # Cookie va localStorage dan kerakli tokenlarni olish
         cookies = await context.cookies()
-        local_storage = await page.evaluate("() => window.localStorage")
-
         session_key = None
+        datadome = None
+
         for c in cookies:
             if c.get("name") == "session_key":
                 session_key = c.get("value")
-
-        datadome_token = None
-        for c in cookies:
             if c.get("name") == "datadome":
-                datadome_token = c.get("value")
+                datadome = c.get("value")
 
         await browser.close()
+        return session_key, datadome
 
-        return session_key, datadome_token
-
-
-def get_player_info(uid, session_key, datadome_token):
+def get_player_info(uid, session_key, datadome):
     url = "https://shop2game.com/api/auth/player_id_login"
 
     cookies = {
         "region": "MA",
         "language": "ar",
         "session_key": session_key,
-        "datadome": datadome_token,
+        "datadome": datadome,
     }
 
     headers = {
@@ -60,18 +56,21 @@ def get_player_info(uid, session_key, datadome_token):
     res = requests.post(url, cookies=cookies, headers=headers, json=json_data)
     return res.json()
 
+@app.route("/region", methods=["GET"])
+def region_info():
+    uid = request.args.get("uid")
+    if not uid:
+        return jsonify({"error": "UID is required"}), 400
 
-async def main(uid):
-    session_key, datadome_token = await get_tokens(uid)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    session_key, datadome = loop.run_until_complete(get_tokens())
 
-    if not session_key or not datadome_token:
-        print("❌ Tokenlarni olishda muammo chiqdi")
-        return
+    if not session_key or not datadome:
+        return jsonify({"error": "Failed to get tokens"}), 500
 
-    data = get_player_info(uid, session_key, datadome_token)
-    print(data)
+    data = get_player_info(uid, session_key, datadome)
+    return jsonify(data)
 
-
-#if __name__ == "__main__":
-    # Misol uchun UID
-#    asyncio.run(main("1234567890"))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
