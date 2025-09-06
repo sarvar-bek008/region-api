@@ -13,9 +13,10 @@ async def fetch_tokens():
             context = await browser.new_context()
             page = await context.new_page()
 
-            await page.goto("https://shop2game.com/app/100067/idlogin")
+            await page.goto("https://shop2game.com/app/100067/idlogin", timeout=60000)  # 60s
 
             cookies = await context.cookies()
+            print("Cookies fetched:", cookies)
             session_key = None
             datadome = None
 
