@@ -11,7 +11,7 @@ def get_player_region(uid):
         task = progress.add_task("[cyan]Fetching player data...", total=100)
 
         cookies = {
-            'region': 'RU',
+            'region': 'MA',
             'language': 'ar',
             'session_key': 'efwfzwesi9ui8drux4pmqix4cosane0y',
         }
