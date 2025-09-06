@@ -5,61 +5,99 @@ import requests
 
 app = Flask(__name__)
 
-# --- Playwright bilan token olish ---
 async def fetch_tokens():
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = await browser.new_context()
+            # Launch browser with additional arguments to improve compatibility
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-accelerated-2d-canvas",
+                    "--no-first-run",
+                    "--no-zygote",
+                    "--disable-gpu"
+                ]
+            )
+            # Create context with explicit user agent and viewport
+            context = await browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
+
+            # Navigate to page with extended timeout and wait for network stability
+            await page.goto("https://shop2game.com/app/100067/idlogin", timeout=120000)
+            await page.wait_for_load_state('networkidle', timeout=120000)
             
-            # Misol uchun shop2game login sahifasi
-            await page.goto("https://shop2game.com/login")
-            
-            # Sahifadan token yoki cookie olish
-            # Masalan, session_key yoki datadome cookie
+            # Wait for specific element to ensure page is fully loaded
+            await page.wait_for_selector('input[name="login_id"]', timeout=120000)
+
+            # Retrieve and filter cookies
             cookies = await context.cookies()
-            session_key = next((c['value'] for c in cookies if c['name'] == 'session_key'), None)
-            datadome = next((c['value'] for c in cookies if c['name'] == 'datadome'), None)
-            
+            session_key = next((c.get('value') for c in cookies if c['name'] == 'session_key'), None)
+            datadome = next((c.get('value') for c in cookies if c['name'] == 'datadome'), None)
+
             await browser.close()
-            
-            if not session_key or not datadome:
-                return None, None
             return session_key, datadome
     except Exception as e:
-        print("Playwright xato:", e)
+        print("Playwright error:", str(e))
         return None, None
 
-# --- UID bo'yicha player ma'lumot olish ---
 def get_player_info(uid, session_key, datadome):
     url = "https://shop2game.com/api/auth/player_id_login"
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Cookie": f"session_key={session_key}; datadome={datadome}"
+    
+    cookies = {
+        "region": "RU",
+        "language": "ar",
+        "session_key": session_key,
+        "datadome": datadome,
     }
-    data = {"uid": uid}
-    try:
-        resp = requests.post(url, json=data, headers=headers)
-        return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
 
-# --- Flask endpoint ---
+    headers = {
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://shop2game.com",
+        "Referer": "https://shop2game.com/app/100067/idlogin",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+        "accept": "application/json",
+        "content-type": "application/json",
+    }
+
+    json_data = {
+        "app_id": 100067,
+        "login_id": uid,
+        "app_server_id": 0,
+    }
+
+    try:
+        res = requests.post(url, cookies=cookies, headers=headers, json=json_data, timeout=30)
+        return res.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": "HTTP request failed", "details": str(e)}
+
 @app.route("/region", methods=["GET"])
 def region_info():
     uid = request.args.get("uid")
     if not uid:
         return jsonify({"error": "UID parameter is required"}), 400
-    
-    # Playwright bilan token olish (async)
-    session_key, datadome = asyncio.run(fetch_tokens())
-    if not session_key or not datadome:
-        return jsonify({"error": "Failed to get session tokens"}), 500
-    
-    # UID bo'yicha ma'lumot olish
-    player_info = get_player_info(uid, session_key, datadome)
-    return jsonify(player_info)
+
+    try:
+        # Create new event loop for async operations
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        session_key, datadome = loop.run_until_complete(fetch_tokens())
+
+        if not session_key or not datadome:
+            return jsonify({"error": "Failed to get session tokens"}), 500
+
+        data = get_player_info(uid, session_key, datadome)
+        return jsonify(data)
+
+    except Exception as e:
+        print("Server error:", str(e))
+        return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
