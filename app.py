@@ -36,7 +36,7 @@ def get_player_info(uid, session_key, datadome):
     url = "https://shop2game.com/api/auth/player_id_login"
 
     cookies = {
-        "region": "MA",
+        "region": "RU",
         "language": "ar",
         "session_key": session_key,
         "datadome": datadome,
