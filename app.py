@@ -72,6 +72,6 @@ async def main(uid):
     print(data)
 
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     # Misol uchun UID
-    asyncio.run(main("1234567890"))
+#    asyncio.run(main("1234567890"))
